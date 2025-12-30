@@ -39,9 +39,9 @@ instance Unifiable T.T where
                            case (t', u') of
                              (T.V x, T.V y) | x == y -> Just subst
                              (T.V x, term) | not $ occurs x term ->
-                               Just $ T.add subst x term
+                               Just $ T.put subst x term
                              (term, T.V y) | not $ occurs y term ->
-                               Just $ T.add subst y term
+                               Just $ T.put subst y term
                              (T.C xCst xs, T.C yCst ys) | xCst == yCst &&
                                                           length xs == length ys ->
                                foldl (\s (x, y) -> unify s x y) (Just subst) (zip xs ys)
