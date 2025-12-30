@@ -74,26 +74,17 @@ lookup = flip Map.lookup
 put :: Subst -> Var -> T -> Subst
 put s v t = Map.insert v t s
 
--- Walk primitive: given a variable, lookups for the first
--- non-variable binding; given a non-variable term returns
--- this term
-walk :: Subst -> T -> T
-walk subst v@(V x) = case Term.lookup subst x of
-                       Just v'@(V {}) -> walk subst v'
-                       Just c'@(C {}) -> c'
-                       Nothing -> v
-walk subst c@(C {}) = c
-
 -- A class of substitutable types
 class Substitutable a where
   apply :: Subst -> a -> a
 
 -- Apply a substitution to a term
 instance Substitutable T where
-  apply subst t = case walk subst t of
-    (C cst xs) -> C cst $ map (apply subst) xs
-    v@(V {}) -> v 
-  -- fromMaybe v (Map.lookup x subst)
+  apply subst t =
+    case t of
+    -- case walk subst t of
+      (C cst xs) -> C cst $ map (apply subst) xs
+      v@(V x) -> fromMaybe v (Map.lookup x subst)
 
 -- Occurs-check for terms: return true, if
 -- a variable occurs in the term

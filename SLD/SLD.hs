@@ -11,6 +11,7 @@ import qualified Control.Monad as Monad
 import qualified Control.Monad.State as St
 import Debug.Trace
 import GHC.Stack (HasCallStack)
+import Unify (walkRec)
 
 -- Predicate names
 type Pred = Int
@@ -203,59 +204,65 @@ sortSpec = ltSpec ++ leSpec ++ [
  sort (xs, ys) :- [sort' (xs, nil, ys)]]
 
 --- Samples
+
+-- TODO: apply replaced with walkRec
+
 s_add0 = case eval peano [add (s o, s o, x)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ apply h x)
+          h : _ -> "solution: " ++ (show $ walkRec h x)
 
 s_add1 = case eval peano [add (x, s o, s $ s o)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ apply h x)
+          h : _ -> "solution: " ++ (show $ walkRec h x)
 
 s_add2 = case eval peano [add (x, y, s $ s o)] of
           []               -> "error: should find a soultion"
-          h1 : h2 : h3 : _ -> "solutions: x = " ++ (show $ apply h1 x) ++ ", y = " ++ (show $ apply h1 y) ++ "\n" ++
-                              "           x = " ++ (show $ apply h2 x) ++ ", y = " ++ (show $ apply h2 y) ++ "\n" ++
-                              "           x = " ++ (show $ apply h3 x) ++ ", y = " ++ (show $ apply h3 y) ++ "\n"
+          h1 : h2 : h3 : _ -> "solutions: x = " ++ (show $ walkRec h1 x) ++ ", y = " ++ (show $ walkRec h1 y) ++ "\n" ++
+                              "           x = " ++ (show $ walkRec h2 x) ++ ", y = " ++ (show $ walkRec h2 y) ++ "\n" ++
+                              "           x = " ++ (show $ walkRec h3 x) ++ ", y = " ++ (show $ walkRec h3 y) ++ "\n"
           hs -> show (length hs) ++ " solutions found"
 
 s_add3 = case eval peano [add (x, y, s $ s $ s $ s o)] of
           []               -> "error: should find a soultion"
-          h1 : h2 : h3 : h4 : h5 : _ -> "solutions: x = " ++ (show $ apply h1 x) ++ ", y = " ++ (show $ apply h1 y) ++ "\n" ++
-                              "           x = " ++ (show $ apply h2 x) ++ ", y = " ++ (show $ apply h2 y) ++ "\n" ++
-                              "           x = " ++ (show $ apply h3 x) ++ ", y = " ++ (show $ apply h3 y) ++ "\n"
+          h1 : h2 : h3 : h4 : h5 : _ -> "solutions: x = " ++ (show $ walkRec h1 x) ++ ", y = " ++ (show $ walkRec h1 y) ++ "\n" ++
+                              "           x = " ++ (show $ walkRec h2 x) ++ ", y = " ++ (show $ walkRec h2 y) ++ "\n" ++
+                              "           x = " ++ (show $ walkRec h3 x) ++ ", y = " ++ (show $ walkRec h3 y) ++ "\n"
           hs -> show (length hs) ++ " solutions found"
 
 s_mul0 = case eval mult [mul (s $ s o, s $ s o, x)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ apply h x)
+          h : _ -> "solution: " ++ (show $ walkRec h x)
 
 s_mul1 = case eval mult [mul (x, s $ s $ o, s $ s $ s $ s o)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ apply h x)
+          h : _ -> "solution: " ++ (show $ walkRec h x)
 
 s_mul2 = case eval mult [mul (s $ s $ o, x, s $ s $ s $ s o)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ apply h x)
+          h : _ -> "solution: " ++ (show $ walkRec h x)
 
+-- TODO: only 3 solutions found
 s_mul3 = case take 3 $ eval mult [mul (x, y, s $ s $ s $ s $ s $ s $ s $ s $ s $ s o)] of
             []    -> "error: should find a soultion"
-            h1 : h2 :  h3 : h4 : _ -> "solutions: x = " ++ (show $ apply h1 x) ++ ", y = " ++ (show $ apply h1 y) ++ "\n" ++
-                                "           x = " ++ (show $ apply h2 x) ++ ", y = " ++ (show $ apply h2 y) ++ "\n"
+            h1 : h2 :  h3 : h4 : _ -> "solutions: x = " ++ (show $ walkRec h1 x) ++ ", y = " ++ (show $ walkRec h1 y) ++ "\n" ++
+                                "           x = " ++ (show $ walkRec h2 x) ++ ", y = " ++ (show $ walkRec h2 y) ++ "\n"
             hs -> show (length hs) ++ " solutions found"
 
 s_sort0 = case eval sortSpec [sort (cons (s o) $ cons (s $ s $ s o) $ cons (s $ s o) nil, x)] of
             []    -> "error: should find a solution"
-            h : _ -> "solution: " ++ (show $ apply h x)
+            h : _ -> "solution: " ++ (show $ walkRec h x)
 
 -- TODO: wrong
 s_sort0' = case eval sortSpec [sort (cons (s $ s o) $ cons (s $ s $ s o) $ cons (s o) nil, x)] of
              []    -> "error: should find a solution"
-             h : _ -> "solution: " ++ (show $ apply h x)
+             h : _ -> "solution: " ++ (show $ walkRec h x)
 
+-- inf for now
 s_sort1 = case eval sortSpec [sort (x, cons (s o) $ cons (s $ s $ s o) $ cons (s $ s o) nil)] of
             []    -> "no solutions as expected"
             _ -> "error: solutions found"
 
+-- inf for now
 s_sort2 = case eval sortSpec [sort (x, cons (s o) $ cons (s $ s o) $ cons (s $ s $ s o) nil)] of
             []    -> "error: should find a solution"
             hs -> show (length hs) ++ " solutions found"
