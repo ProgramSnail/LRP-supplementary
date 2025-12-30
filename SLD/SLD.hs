@@ -4,12 +4,13 @@
 
 module SLD where
 
-import Term 
+import Term
 import Unify
 import qualified Data.Map as Map
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as St
 import Debug.Trace
+import GHC.Stack (HasCallStack)
 
 -- Predicate names
 type Pred = Int
@@ -21,7 +22,7 @@ type A = (Pred, [T])
 -- atomic formulas
 class Atomic a where
   toAtomic   :: a -> A
-  fromAtomic :: A -> a 
+  fromAtomic :: A -> a
 
 -- Horn clause
 data H = A :- [A] deriving Show
@@ -29,19 +30,20 @@ data H = A :- [A] deriving Show
 -- Program
 type P = [H]
 
--- Unification for atomic formulas
+-- Unification for atomic formulas -- ??
 instance Unifiable A where
-  unify = undefined
-  
+  unify subst (aP, as) (bP, bs) | aP == bP = foldl unifyUnc subst $ zip as bs
+                                | otherwise = Nothing
+
 -- Substitution application to atomic formulas
 instance Substitutable A where
-  apply = undefined
+  apply subst (aP, as) = (aP, fmap (apply subst) as)
 
 -- State
 --   1. A triple
 --      1. a tail of a program to match against
---	2. current goal
---	3. current substitution
+--      2. current goal
+--      3. current substitution
 --   2. A stack of triplets as in the previous item
 --   3. An index of first fresh variable
 type Triplet = (P, [A], Subst)
@@ -66,7 +68,7 @@ refresh (C c ts) = Monad.liftM (C c) $ mapM refresh ts
 -- Refresh all variables in atomic formula
 refreshA :: A -> St.State (Var, Map.Map Var Var) A
 refreshA (p, ts) = Monad.liftM (p,) $ mapM refresh ts
-  
+
 -- Refresh all variables in a horn clause
 refreshH :: H -> St.State (Var, Map.Map Var Var) H
 refreshH (a :- as) = Monad.liftM (\ (a:as) -> (a :- as)) $ mapM refreshA (a:as)
@@ -85,8 +87,61 @@ eval :: P -> [A] -> [Subst]
 eval p g = evalRec p $ initState p g
 
 -- Recursive evalutor
-evalRec :: P -> State -> [Subst] 
-evalRec p ((hs, g, subst), stack, fresh) = undefined
+evalRec' :: P -> State -> [Subst]
+-- -- StopResult
+evalRec' p (([], [], subst), [], fresh) = [subst]
+-- -- Stop
+evalRec' p (([], _, subst), [], fresh) = []
+-- -- BacktrackResult
+evalRec' p (([], [], subst), t : ts, fresh) = subst : evalRec p (t, ts, fresh)
+-- -- Backtrack
+evalRec' p (([], _, subst), t : ts, fresh) = evalRec p (t, ts, fresh)
+
+evalRec' p ((h@(hd :- tl) : hs, g : gs, subst), stack, fresh) =
+  let (h'@(hd' :- tl'), fresh') = rename h fresh in
+  let stack' = (hs, g : gs, subst) : stack in
+  case unify (Just subst) hd' g of
+-- -- MatchResult
+    Just subst' | null tl -> evalRec p ((p, tl' ++ gs, subst'), stack', fresh')
+-- -- NextGoal
+                | otherwise -> evalRec p ((p, gs, subst'), stack', fresh')
+-- -- MatchFailure
+    Nothing -> evalRec p ((hs, g : gs, subst), stack, fresh)
+
+-- evalRec p ((hs, g, subst), stack, fresh) = undefined
+
+-- Recursive evalutor: another semantics
+evalRec :: HasCallStack => P -> State -> [Subst]
+-- -- StopResult
+evalRec p ((_, [], subst), [], fresh) = -- trace "stop result" $
+                                        [subst]
+-- -- Stop
+evalRec p (([], _, subst), [], fresh) = -- trace "stop" $
+                                        []
+-- -- BacktrackResult
+evalRec p ((_, [], subst), t : ts, fresh) = -- trace "backtrack result" $
+                                            subst : evalRec p (t, ts, fresh)
+-- -- Backtrack
+evalRec p (([], _, subst), t : ts, fresh) = -- trace "backtrack" $
+                                            evalRec p (t, ts, fresh)
+
+evalRec p ((h@(hd :- tl) : hs, g : gs, subst), stack, fresh) =
+  let (h'@(hd' :- tl'), fresh') = rename h fresh in
+  let stack' = (hs, g : gs, subst) : stack in
+  -- trace ("evalRec: h' = " ++ show h' ++ "\n         g =  " ++ show g ++
+  --        "\n subst_before=" ++ show subst) $
+  case unify (Just subst) hd' g of
+-- -- MatchResult
+    Just subst' | not $ null tl -> -- trace ("-> match result" ++
+                                   --        "\n subst_after=" ++ show subst') $
+                                   evalRec p ((p, tl' ++ gs, subst'), stack', fresh')
+-- -- NextGoal
+                | otherwise -> -- trace ("-> next goal" ++
+                               --        "\n subst_after=" ++ show subst') $
+                               evalRec p ((p, gs, subst'), stack', fresh')
+-- -- MatchFailure
+    Nothing -> -- trace "-> match failure" $
+               evalRec p ((hs, g : gs, subst), stack, fresh)
 
 ------------------------------------------
 --- Some relations for natural numbers ---
@@ -108,14 +163,14 @@ lt  (x, y)    = (2, [x, y])
 le  (x, y)    = (3, [x, y])
 
 --- Specifications
-peano = [add (o, x, x) :- [], add (s(x), y, s(z)) :- [add (x, y, z)]]
+peano = [add (o, x, x) :- [], add (s (x), y, s (z)) :- [add (x, y, z)]]
 
 --- Samples
-s0 = case eval peano [add (s(o), s(o), x)] of
+s0 = case eval peano [add (s (o), s (o), x)] of
        []    -> "error: should find a solution"
-       h : _ -> "solution: " ++ (show $ apply h x)
+       h : _ -> "solution: " ++ (show $ apply h x) -- apply
 
-s1 = case eval peano [add (x, s(o), s (s (o)))] of
+s1 = case eval peano [add (x, s (o), s (s (o)))] of
        []    -> "error: should find a solution"
        h : _ -> "solution: " ++ (show $ apply h x)
 
@@ -124,3 +179,4 @@ s2 = case eval peano [add (x, y, s (s (o)))] of
        h1 : h2 : h3 : _ -> "solutions: x = " ++ (show $ apply h1 x) ++ ", y = " ++ (show $ apply h1 y) ++ "\n" ++
                            "           x = " ++ (show $ apply h2 x) ++ ", y = " ++ (show $ apply h2 y) ++ "\n" ++
                            "           x = " ++ (show $ apply h3 x) ++ ", y = " ++ (show $ apply h3 y) ++ "\n"
+       hs -> show (length hs) ++ " solutions found"
