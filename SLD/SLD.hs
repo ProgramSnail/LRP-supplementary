@@ -9,7 +9,7 @@ import Unify
 import qualified Data.Map as Map
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as St
-import Debug.Trace
+-- import Debug.Trace
 import GHC.Stack (HasCallStack)
 import Unify (walkRec)
 
@@ -38,7 +38,7 @@ instance Unifiable A where
 
 -- Substitution application to atomic formulas
 instance Substitutable A where
-  apply subst (aP, as) = (aP, fmap (apply subst) as)
+  apply subst (aP, as) = (aP, map (apply subst) as)
 
 -- State
 --   1. A triple
@@ -109,45 +109,75 @@ evalRec' p ((h@(hd :- tl) : hs, g : gs, subst), stack, fresh) =
 -- -- MatchFailure
     Nothing -> evalRec p ((hs, g : gs, subst), stack, fresh)
 
--- evalRec p ((hs, g, subst), stack, fresh) = undefined
+walkRecA :: Subst -> A -> A
+walkRecA subst (p, ts) = (p, map (walkRec subst) ts)
 
+-- evalRec p ((hs, g, subst), stack, fresh) = undefined
 -- Recursive evalutor: another semantics
 evalRec :: HasCallStack => P -> State -> [Subst]
 -- -- StopResult
-evalRec p ((_, [], subst), [], fresh) = trace "stop result" $
+evalRec p ((_, [], subst), [], fresh) = -- trace ("stop result: " ++ show subst) $
                                         [subst]
 -- -- Stop
-evalRec p (([], _, subst), [], fresh) = trace "stop" $
+evalRec p (([], _, subst), [], fresh) = -- trace "stop" $
                                         []
 -- -- BacktrackResult
-evalRec p ((_, [], subst), t : ts, fresh) = trace "backtrack result" $
+evalRec p ((_, [], subst), t : ts, fresh) = -- trace ("backtrack result: " ++ show subst ++ " next st.sz=" ++ show (length ts)) $
                                             subst : evalRec p (t, ts, fresh)
 -- -- Backtrack
-evalRec p (([], _, subst), t : ts, fresh) = trace "backtrack" $
+evalRec p (([], _, subst), t : ts, fresh) = -- trace "backtrack" $
                                             evalRec p (t, ts, fresh)
 
 evalRec p ((h@(hd :- tl) : hs, g : gs, subst), stack, fresh) =
   let (h'@(hd' :- tl'), fresh') = rename h fresh in
   let stack' = (hs, g : gs, subst) : stack in
-  trace ("evalRec: h' = " ++ show h' ++ "\n         g =  " ++ show g ++
-         "\n subst_before=" ++ show subst ++
-         "\n goals_before=" ++ show (g : gs)) $
-  case unify (Just subst) hd' g of
+  -- (if fst hd == fst g
+  -- then trace ("evalRec: h' = " ++ show (hToValue h') ++ "\n         g =  " ++ show (map (aToValue . walkRecA subst) $ g : gs) ++ " st.sz = " ++ show (length stack))
+  -- -- trace ("evalRec: h' = " ++ show h' ++ "\n         g =  " ++ show g ++
+  -- --        "\n subst_before=" ++ show subst ++
+  -- --        "\n goals_before=" ++ show (g : gs)) $ -- (map (walkRecA subst) $ g : gs)) $
+  -- else id) $
+  case unify (Just subst) hd' g of -- TODO: use walk rec at the end instead ??
 -- -- MatchResult
-    Just subst' | not $ null tl -> trace ("-> match result" ++
-                                          "\n subst_after=" ++ show subst') $
-                                   evalRec p ((p, tl' ++ gs, subst'), stack', fresh')
+    Just subst' | not $ null tl -> -- trace ("-> match result") $
+                                       -- ++ "\n subst_after=" ++ show subst') $
+                                   evalRec p ((p, map (apply subst') (tl' ++ gs), subst <+> subst'), stack', fresh' + 1)
 -- -- NextGoal
-                | otherwise -> trace ("-> next goal" ++
-                                      "\n subst_after=" ++ show subst') $
-                               evalRec p ((p, gs, subst'), stack', fresh')
+                | otherwise -> -- trace ("-> next goal") $
+                                  -- ++ "\n subst_after=" ++ show subst') $
+                               evalRec p ((p, map (apply subst') gs, subst <+> subst'), stack', fresh' + 1)
 -- -- MatchFailure
-    Nothing -> trace "-> match failure" $
-               evalRec p ((hs, g : gs, subst), stack, fresh)
+    Nothing -> -- trace "-> match failure" $
+               evalRec p ((hs, g : gs, subst), stack, fresh' + 1)
 
 ------------------------------------------
 --- Some relations for natural numbers ---
 ------------------------------------------
+
+
+--- Debug construcitons
+data Value = I Int
+           | L [Value]
+           | Va Int
+           | Undef String
+           | Value :+: Int
+  deriving Show
+
+termToValue :: T -> Value
+termToValue (V v) = Va v
+termToValue (C 0 _) = I 0
+termToValue (C 1 [t]) | I n <- termToValue t = I $ n + 1
+                      | v :+: n <- termToValue t = v :+: (n + 1)
+                      | v <- termToValue t = v :+: 1
+termToValue (C 2 _) = L []
+termToValue (C 3 [h, t]) | x <- termToValue h, L xs <- termToValue t = L $ x : xs
+termToValue t = Undef $ show t
+
+aToValue :: A -> (Int, [Value])
+aToValue (x, t) = (x, map termToValue t)
+
+hToValue :: H -> [(Int, [Value])]
+hToValue (hd :- tl) = aToValue hd : map aToValue tl
 
 --- Some predefined variables
 x = V 0
@@ -183,8 +213,8 @@ peano = [
 
 mult = peano ++ [
   mul (o, x, o) :- [],
-  mul (s o, x, x) :- [],
-  mul (s x, y, z) :- [add(w, y, z), mul (x, y, w)]]
+  -- mul (s o, x, x) :- [],
+  mul (s x, y, z) :- [add (w, y, z), mul (x, y, w)]]
 
 ltSpec = [
   lt (o, s x) :- [],
@@ -196,74 +226,62 @@ leSpec = [
 
 sortSpec = ltSpec ++ leSpec ++ [
  insert (x, nil, cons x nil) :- [],
+ insert (x, cons y xs, cons x $ cons y xs) :- [lt (x, y)],
  insert (x, cons y xs, cons y ys) :- [lt (y, x), insert (x, xs, ys)],
- insert (x, cons y xs, cons x $ cons y ys) :- [le (x, y)],
 
  sort' (nil, xs, xs) :- [],
- sort' (cons x xs, ys, zs) :- [insert(x, ys, ys'), sort' (xs, ys', zs)],
+ sort' (cons x xs, ys, zs) :- [insert (x, ys, ys'), sort' (xs, ys', zs)],
+
  sort (xs, ys) :- [sort' (xs, nil, ys)]]
 
 --- Samples
 
--- TODO: apply replaced with walkRec
-
 s_add0 = case eval peano [add (s o, s o, x)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ walkRec h x)
+          h : _ -> "solution: " ++ show (apply h x)
 
 s_add1 = case eval peano [add (x, s o, s $ s o)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ walkRec h x)
+          h : _ -> "solution: " ++ show (apply h x)
 
 s_add2 = case eval peano [add (x, y, s $ s o)] of
           []               -> "error: should find a soultion"
-          h1 : h2 : h3 : _ -> "solutions: x = " ++ (show $ walkRec h1 x) ++ ", y = " ++ (show $ walkRec h1 y) ++ "\n" ++
-                              "           x = " ++ (show $ walkRec h2 x) ++ ", y = " ++ (show $ walkRec h2 y) ++ "\n" ++
-                              "           x = " ++ (show $ walkRec h3 x) ++ ", y = " ++ (show $ walkRec h3 y) ++ "\n"
-          hs -> show (length hs) ++ " solutions found"
-
-s_add3 = case eval peano [add (x, y, s $ s $ s $ s o)] of
-          []               -> "error: should find a soultion"
-          h1 : h2 : h3 : h4 : h5 : _ -> "solutions: x = " ++ (show $ walkRec h1 x) ++ ", y = " ++ (show $ walkRec h1 y) ++ "\n" ++
-                              "           x = " ++ (show $ walkRec h2 x) ++ ", y = " ++ (show $ walkRec h2 y) ++ "\n" ++
-                              "           x = " ++ (show $ walkRec h3 x) ++ ", y = " ++ (show $ walkRec h3 y) ++ "\n"
-          hs -> show (length hs) ++ " solutions found"
+          hs | length hs == 3 -> (++) "solutions: " $ concatMap (\h -> "x = " ++ show (apply h x) ++ "y = " ++ show (apply h y)++ "\n           ") hs
+             | otherwise -> show (length hs) ++ " solutions found"
 
 s_mul0 = case eval mult [mul (s $ s o, s $ s o, x)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ walkRec h x)
+          h : _ -> "solution: " ++ show (apply h x)
 
-s_mul1 = case eval mult [mul (x, s $ s $ o, s $ s $ s $ s o)] of
+s_mul1 = case eval mult [mul (x, s $ s o, s $ s $ s $ s o)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ walkRec h x)
+          h : _ -> "solution: " ++ show (apply h x)
 
-s_mul2 = case eval mult [mul (s $ s $ o, x, s $ s $ s $ s o)] of
+s_mul2 = case eval mult [mul (s $ s o, x, s $ s $ s $ s o)] of
           []    -> "error: should find a solution"
-          h : _ -> "solution: " ++ (show $ walkRec h x)
+          h : _ -> "solution: " ++ show (apply h x)
 
--- TODO: only 3 solutions found
-s_mul3 = case take 3 $ eval mult [mul (x, y, s $ s $ s $ s $ s $ s $ s $ s $ s $ s o)] of
-            []    -> "error: should find a soultion"
-            h1 : h2 :  h3 : h4 : _ -> "solutions: x = " ++ (show $ walkRec h1 x) ++ ", y = " ++ (show $ walkRec h1 y) ++ "\n" ++
-                                "           x = " ++ (show $ walkRec h2 x) ++ ", y = " ++ (show $ walkRec h2 y) ++ "\n"
-            hs -> show (length hs) ++ " solutions found"
+s_mul3 = case take 3 $ eval mult [mul (x, y, s $ s $ s $ s o)] of
+            []                  -> "error: should find a soultion"
+            hs | length hs == 3 -> (++) "solutions: " $ concatMap (\h -> "x = " ++ show (apply h x) ++ "y = " ++ show (apply h y)++ "\n           ") hs
+               | otherwise      -> "error: " ++ show (length hs) ++ " solutions found"
 
-s_sort0 = case eval sortSpec [sort (cons (s o) $ cons (s $ s $ s o) $ cons (s $ s o) nil, x)] of
+s_sort0 = case  eval sortSpec [sort (cons (s o) $ cons (s $ s $ s o) $ cons (s $ s o) nil, x)] of
             []    -> "error: should find a solution"
-            h : _ -> "solution: " ++ (show $ walkRec h x)
+            h : _ -> "solution: " ++ show (apply h x)
 
--- TODO: wrong
-s_sort0' = case eval sortSpec [sort (cons (s $ s o) $ cons (s $ s $ s o) $ cons (s o) nil, x)] of
+s_sort1 = case eval sortSpec [sort (cons (s $ s o) $ cons (s $ s $ s o) $ cons (s o) nil, x)] of
              []    -> "error: should find a solution"
-             h : _ -> "solution: " ++ (show $ walkRec h x)
+             h : _ -> "solution: " ++ show (apply h x)
 
--- inf for now
-s_sort1 = case eval sortSpec [sort (x, cons (s o) $ cons (s $ s $ s o) $ cons (s $ s o) nil)] of
-            []    -> "no solutions as expected"
-            _ -> "error: solutions found"
+-- NOTE: inf, incompl problem
+-- s_sort2 = case take 6 $ eval sortSpec [sort (x, cons (s o) $ cons (s $ s o) $ cons (s $ s $ s o) nil)] of
+--             []                  -> "error: should find a soultion"
+--             hs | length hs == 6 -> (++) "solutions: " $ concatMap (\h -> "x = " ++ show (apply h x) ++ "\n           ") hs
+--                | otherwise      -> "error: " ++ show (length hs) ++ " solutions found"
 
--- inf for now
-s_sort2 = case eval sortSpec [sort (x, cons (s o) $ cons (s $ s o) $ cons (s $ s $ s o) nil)] of
-            []    -> "error: should find a solution"
-            hs -> show (length hs) ++ " solutions found"
+-- NOTE: inf
+-- s_sort3 = case eval sortSpec [sort (x, cons (s o) $ cons (s $ s $ s o) $ cons (s $ s o) nil)] of
+--             []    -> "no solutions as expected"
+--             _     -> "error: solutions found"
 
