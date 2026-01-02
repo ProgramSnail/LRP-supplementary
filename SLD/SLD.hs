@@ -214,7 +214,7 @@ peano = [
 mult = peano ++ [
   mul (o, x, o)      :- [],
   -- mul (s o, x, x) :- [],
-  mul (s x, y, z)    :- [mul (x, y, w), add (w, y, z)]]
+  mul (s x, y, z)    :- [add (y, w, z), mul (x, y, w)]]
 
 ltSpec = [
   lt (o, s y)   :- [],
@@ -261,7 +261,7 @@ s_mul2 = case eval mult [mul (s $ s o, x, s $ s $ s $ s o)] of
           []    -> "error: should find a solution"
           h : _ -> "solution: " ++ show (apply h x)
 
--- NOTE: incompl for this mul
+-- NOTE: incompl for this mult
 -- s_mul3 = case take 3 $ eval mult [mul (x, y, s $ s $ s $ s o)] of
 --             []                  -> "error: should find a soultion"
 --             hs | length hs == 3 -> (++) "solutions: " $ concatMap (\h -> "x = " ++ show (apply h x) ++ "y = " ++ show (apply h y)++ "\n           ") hs
