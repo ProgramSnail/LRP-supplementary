@@ -110,8 +110,8 @@ mul x y z = delay $
   callFresh(\ x' ->
   callFresh(\ w  ->
     x === s x' &&&
-    mul x' y w &&&
-    add w y z
+    add y w z &&&
+    mul x' y w
   ))
 
 lt x y = delay $
@@ -175,7 +175,7 @@ s_add2 = run (peep [x, y]) $ add x y (s (s o))
 -- s_add3 = run (peep [x, y]) $ add x (s (s o)) y
 
 s_mul0 = run (peep [x])       $ mul (s $ s o) (s $ s o) x
-s_mul1 = runN 1 (peep [x])    $ mul x (s $ s o) (s $ s $ s $ s o)
+s_mul1 = run (peep [x])    $ mul x (s $ s o) (s $ s $ s $ s o)
 s_mul2 = run (peep [x])       $ mul (s $ s o) x (s $ s $ s $ s o)
 s_mul3 = runN 3 (peep [x, y]) $   mul x y (s $ s $ s $ s o) -- all results found due to compl
 
