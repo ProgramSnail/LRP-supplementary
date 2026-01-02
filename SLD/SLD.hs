@@ -180,15 +180,15 @@ hToValue :: H -> [(Int, [Value])]
 hToValue (hd :- tl) = aToValue hd : map aToValue tl
 
 --- Some predefined variables
-x = V 0
-y = V 1
-z = V 2
-w = V 3
-xs = V 4
-ys = V 5
-zs = V 6
-x' = V 7
-y' = V 8
+x   = V 0
+y   = V 1
+z   = V 2
+w   = V 3
+xs  = V 4
+ys  = V 5
+zs  = V 6
+x'  = V 7
+y'  = V 8
 ys' = V 9
 
 --- Terms
@@ -198,38 +198,38 @@ nil      = C 2 []
 cons h t = C 3 [h, t]
 
 --- Predicates
-add (x, y, z) = (0, [x, y, z])
-mul (x, y, z) = (1, [x, y, z])
-lt  (x, y)    = (2, [x, y])
-le  (x, y)    = (3, [x, y])
-sort (x, y)   = (4, [x, y])
-sort' (x, y, z)   = (5, [x, y, z])
+add (x, y, z)      = (0, [x, y, z])
+mul (x, y, z)      = (1, [x, y, z])
+lt  (x, y)         = (2, [x, y])
+le  (x, y)         = (3, [x, y])
+sort (x, y)        = (4, [x, y])
+sort' (x, y, z)    = (5, [x, y, z])
 insert (x, y, z)   = (6, [x, y, z])
 
 --- Specifications
 peano = [
-  add (o, x, x) :- [],
+  add (o, x, x)     :- [],
   add (s x, y, s z) :- [add (x, y, z)]]
 
 mult = peano ++ [
-  mul (o, x, o) :- [],
+  mul (o, x, o)      :- [],
   -- mul (s o, x, x) :- [],
-  mul (s x, y, z) :- [add (w, y, z), mul (x, y, w)]]
+  mul (s x, y, z)    :- [mul (x, y, w), add (w, y, z)]]
 
 ltSpec = [
-  lt (o, s x) :- [],
+  lt (o, s y)   :- [],
   lt (s x, s y) :- [lt (x, y)]]
 
 leSpec = [
-  le (o, x) :- [],
+  le (o, y)     :- [],
   le (s x, s y) :- [le (x, y)]]
 
 sortSpec = ltSpec ++ leSpec ++ [
- insert (x, nil, cons x nil) :- [],
+ insert (x, nil, cons x nil)               :- [],
  insert (x, cons y xs, cons x $ cons y xs) :- [lt (x, y)],
- insert (x, cons y xs, cons y ys) :- [lt (y, x), insert (x, xs, ys)],
+ insert (x, cons y xs, cons y ys)          :- [lt (y, x), insert (x, xs, ys)],
 
- sort' (nil, xs, xs) :- [],
+ sort' (nil, xs, xs)       :- [],
  sort' (cons x xs, ys, zs) :- [insert (x, ys, ys'), sort' (xs, ys', zs)],
 
  sort (xs, ys) :- [sort' (xs, nil, ys)]]
@@ -245,9 +245,9 @@ s_add1 = case eval peano [add (x, s o, s $ s o)] of
           h : _ -> "solution: " ++ show (apply h x)
 
 s_add2 = case eval peano [add (x, y, s $ s o)] of
-          []               -> "error: should find a soultion"
+          []                  -> "error: should find a soultion"
           hs | length hs == 3 -> (++) "solutions: " $ concatMap (\h -> "x = " ++ show (apply h x) ++ "y = " ++ show (apply h y)++ "\n           ") hs
-             | otherwise -> show (length hs) ++ " solutions found"
+             | otherwise      -> show (length hs) ++ " solutions found"
 
 s_mul0 = case eval mult [mul (s $ s o, s $ s o, x)] of
           []    -> "error: should find a solution"
@@ -261,10 +261,11 @@ s_mul2 = case eval mult [mul (s $ s o, x, s $ s $ s $ s o)] of
           []    -> "error: should find a solution"
           h : _ -> "solution: " ++ show (apply h x)
 
-s_mul3 = case take 3 $ eval mult [mul (x, y, s $ s $ s $ s o)] of
-            []                  -> "error: should find a soultion"
-            hs | length hs == 3 -> (++) "solutions: " $ concatMap (\h -> "x = " ++ show (apply h x) ++ "y = " ++ show (apply h y)++ "\n           ") hs
-               | otherwise      -> "error: " ++ show (length hs) ++ " solutions found"
+-- NOTE: incompl for this mul
+-- s_mul3 = case take 3 $ eval mult [mul (x, y, s $ s $ s $ s o)] of
+--             []                  -> "error: should find a soultion"
+--             hs | length hs == 3 -> (++) "solutions: " $ concatMap (\h -> "x = " ++ show (apply h x) ++ "y = " ++ show (apply h y)++ "\n           ") hs
+--                | otherwise      -> "error: " ++ show (length hs) ++ " solutions found"
 
 s_sort0 = case  eval sortSpec [sort (cons (s o) $ cons (s $ s $ s o) $ cons (s $ s o) nil, x)] of
             []    -> "error: should find a solution"
